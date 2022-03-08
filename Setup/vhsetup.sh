@@ -639,9 +639,9 @@ input_email() {
 }
 apply_lecert() {
     if [ ${WWW} = 'TRUE' ]; then
-        certbot certonly --non-interactive --agree-tos -m ${EMAIL} --webroot -w ${DOCHM} -d ${MY_DOMAIN} -d ${MY_DOMAIN2}
+        certbot certonly --non-interactive --agree-tos -m ${EMAIL} --webroot -w ${DOCHM} -d ${MY_DOMAIN} -d ${MY_DOMAIN2} --key-type ecdsa
     else
-        certbot certonly --non-interactive --agree-tos -m ${EMAIL} --webroot -w ${DOCHM} -d ${MY_DOMAIN}
+        certbot certonly --non-interactive --agree-tos -m ${EMAIL} --webroot -w ${DOCHM} -d ${MY_DOMAIN} --key-type ecdsa
     fi
     if [ ${?} -eq 0 ]; then
         update_vh_conf
