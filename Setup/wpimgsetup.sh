@@ -2,7 +2,7 @@
 # /********************************************************************
 # LiteSpeed WordPress setup Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Copyright: (c) 2019-2021
+# @Copyright: (c) 2019-2023
 # *********************************************************************/
 LSWSFD='/usr/local/lsws'
 DOCHM='/var/www/html.old'
@@ -11,14 +11,13 @@ PHPCONF='/var/www/phpmyadmin'
 LSWSCONF="${LSWSFD}/conf/httpd_config.conf"
 WPVHCONF="${LSWSFD}/conf/vhosts/wordpress/vhconf.conf"
 EXAMPLECONF="${LSWSFD}/conf/vhosts/wordpress/vhconf.conf"
-PHPINICONF="${LSWSFD}/lsphp80/etc/php/8.0/litespeed/php.ini"
 MEMCACHECONF='/etc/memcached.conf'
 REDISSERVICE='/lib/systemd/system/redis-server.service'
 REDISCONF='/etc/redis/redis.conf'
 WPCONSTCONF="${DOCHM}/wp-content/plugins/litespeed-cache/data/const.default.ini"
 MARIADBSERVICE='/lib/systemd/system/mariadb.service'
 MARIADBCNF='/etc/mysql/mariadb.conf.d/60-server.cnf'
-PHPVER=80
+PHPVER=81
 FIREWALLLIST="22 80 443"
 USER='www-data'
 GROUP='www-data'
@@ -71,7 +70,7 @@ get_sql_ver(){
 check_sql_ver(){    
     if (( ${SQL_MAINV} >=11 && ${SQL_MAINV}<=99 )); then
         echoG '[OK] Mariadb version -ge 11'
-    elif (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=3 && ${SQL_SECV}<=9 )); then
+    elif (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=3 )); then
         echoG '[OK] Mariadb version -ge 10.3'
     else
         echoR "Mariadb version ${SQLDBVER} is lower than 10.3, please check!"    
@@ -85,7 +84,6 @@ check_os()
         OSNAME=centos
         USER='nobody'
         GROUP='nobody'
-        PHPINICONF="${LSWSFD}/lsphp${PHPVER}/etc/php.ini"
         MARIADBCNF='/etc/my.cnf.d/60-server.cnf'
         REDISSERVICE='/lib/systemd/system/redis.service'
         REDISCONF='/etc/redis.conf'
@@ -94,15 +92,7 @@ check_os()
         OSVER=$(cat /etc/redhat-release | awk '{print substr($4,1,1)}')
     elif [ -f /etc/lsb-release ] ; then
         OSNAME=ubuntu
-        OSNAMEVER=''
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=18." >/dev/null
-        if [ ${?} = 0 ] ; then
-            OSNAMEVER=UBUNTU18
-        fi
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=20." >/dev/null
-        if [ $? = 0 ] ; then
-            OSNAMEVER=UBUNTU20
-        fi    
+        OSNAMEVER="UBUNTU$(lsb_release -sr | awk -F '.' '{print $1}')"
     elif [ -f /etc/debian_version ] ; then
         OSNAME=debian
     fi         
@@ -220,11 +210,6 @@ centos_install_ols(){
     install_ols_wp
 }
 
-centos_install_php(){
-    echoG 'Install lsphp extensions'
-    yum -y install lsphp${PHPVER}-memcached lsphp${PHPVER}-redis lsphp${PHPVER}-opcache lsphp${PHPVER}-imagick > /dev/null 2>&1
-}
-
 centos_install_memcached(){
     echoG 'Install Memcached'
     yum -y install memcached > /dev/null 2>&1
@@ -267,11 +252,6 @@ ubuntu_install_ols(){
     install_ols_wp
 }
 
-ubuntu_install_php(){
-    echoG 'Install lsphp extensions'
-    apt-get -y install lsphp${PHPVER}-memcached lsphp${PHPVER}-redis lsphp${PHPVER}-opcache lsphp${PHPVER}-imagick > /dev/null 2>&1
-}
-
 ubuntu_install_memcached(){
     echoG 'Install Memcached'
     apt-get -y install memcached > /dev/null 2>&1
@@ -285,16 +265,10 @@ ubuntu_install_redis(){
     systemctl start redis > /dev/null 2>&1
 }
 
-ubuntu_install_postfix(){
-    echoG 'Install Postfix'
-    DEBIAN_FRONTEND='noninteractive' apt-get -y -o Dpkg::Options::='--force-confdef' \
-    -o Dpkg::Options::='--force-confold' install postfix > /dev/null 2>&1
-}
-
 ubuntu_install_certbot(){       
     echoG "Install CertBot" 
-    add-apt-repository universe > /dev/null 2>&1
     if [ "${OSNAMEVER}" = 'UBUNTU18' ]; then
+        add-apt-repository universe > /dev/null 2>&1
         echo -ne '\n' | add-apt-repository ppa:certbot/certbot > /dev/null 2>&1
     fi    
     apt-get update > /dev/null 2>&1
@@ -440,17 +414,6 @@ landing_pg(){
     fi    
 }
 
-config_php(){
-    echoG 'Updating PHP Paremeter'
-    NEWKEY='max_execution_time = 360'
-    linechange 'max_execution_time' ${PHPINICONF} "${NEWKEY}"
-    NEWKEY='post_max_size = 64M'
-    linechange 'post_max_size' ${PHPINICONF} "${NEWKEY}"
-    NEWKEY='upload_max_filesize = 64M'
-    linechange 'upload_max_filesize' ${PHPINICONF} "${NEWKEY}"
-    echoG 'Finish PHP Paremeter'
-}
-
 update_final_permission(){
     change_owner ${DOCHM}
     change_owner /tmp/lshttpd/lsphp.sock*
@@ -545,7 +508,7 @@ config_mysql(){
         EXISTSQLPASS=$(grep root_mysql_passs ${HMPATH}/.db_password | awk -F '"' '{print $2}'); 
     fi    
     if [ "${EXISTSQLPASS}" = '' ]; then
-        if (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=4 && ${SQL_SECV}<=9 )); then
+        if (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=4 )); then
             mysql -u root -p${root_mysql_pass} \
                 -e "ALTER USER root@localhost IDENTIFIED VIA mysql_native_password USING PASSWORD('${root_mysql_pass}');"
         else
@@ -553,7 +516,7 @@ config_mysql(){
                 -e "update mysql.user set authentication_string=password('${root_mysql_pass}') where user='root';"
         fi    
     else
-        if (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=4 && ${SQL_SECV}<=9 )); then
+        if (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=4)); then
             mysql -u root -p${EXISTSQLPASS} \
                 -e "ALTER USER root@localhost IDENTIFIED VIA mysql_native_password USING PASSWORD('${root_mysql_pass}');"
         else        
@@ -561,12 +524,12 @@ config_mysql(){
                 -e "update mysql.user set authentication_string=password('${root_mysql_pass}') where user='root';" 
         fi        
     fi
-    if [ -e ${MARIADBSERVICE} ]; then
-        grep -i LogLevelMax ${MARIADBSERVICE} >/dev/null 2>&1
-        if [ ${?} = 1 ]; then
-            echo 'LogLevelMax=1' >> ${MARIADBSERVICE}
-        fi
-    fi
+    #if [ -e ${MARIADBSERVICE} ]; then
+    #    grep -i LogLevelMax ${MARIADBSERVICE} >/dev/null 2>&1
+    #    if [ ${?} = 1 ]; then
+    #        echo 'LogLevelMax=1' >> ${MARIADBSERVICE}
+    #    fi
+    #fi
     if [ ! -e ${MARIADBCNF} ]; then 
     touch ${MARIADBCNF}
     cat > ${MARIADBCNF} <<END 
@@ -647,10 +610,10 @@ server_ip = ''
 guest = false
 
 ; O_GUEST_OPTM
-guest_optm = true
+guest_optm = false
 
 ; O_NEWS
-news = false
+news = true
 
 ; O_GUEST_UAS
 guest_uas = 'Lighthouse
@@ -928,11 +891,15 @@ optm-css_comb_ext_inl = true
 ; O_OPTM_UCSS
 optm-ucss = false
 
-; O_OPTM_UCSS_WHITELIST
+; O_OPTM_UCSS_INLINE	
+optm-ucss_inline = false	
+; O_OPTM_UCSS_FILE_EXC_INLINE	
+optm-ucss_file_exc_inline = ''	
+; O_OPTM_UCSS_SELECTOR_WHITELIST
 optm-ucss_whitelist = ''
 
-; O_OPTM_CSS_HTTP2
-optm-css_http2 = false
+; O_OPTM_UCSS_EXC	
+optm-ucss_exc = ''
 
 optm-css_exc = ''
 
@@ -944,9 +911,6 @@ optm-js_comb = false
 
 ; O_OPTM_JS_COMB_EXT_INL
 optm-js_comb_ext_inl = true
-
-; O_OPTM_JS_HTTP2
-optm-js_http2 = false
 
 optm-js_exc = 'jquery.js
 jquery.min.js'
@@ -964,7 +928,7 @@ optm-ggfonts_rm = false
 optm-css_async = false
 
 ; O_OPTM_CCSS_PER_URL
-optm-ccss_per_url = true
+optm-ccss_per_url = false
 
 ; O_OPTM_CSS_ASYNC_INLINE
 optm-css_async_inline = true
@@ -1042,16 +1006,20 @@ object-pswd = ''
 
 object-global_groups = 'users
 userlogins
-usermeta
-user_meta
-site-transient
-site-options
-site-lookup
-blog-lookup
-blog-details
-rss
-global-posts
-blog-id-cache'
+useremail	
+userslugs	
+usermeta	
+user_meta	
+site-transient	
+site-options	
+site-lookup	
+site-details	
+blog-lookup	
+blog-details	
+blog-id-cache	
+rss	
+global-posts	
+global-cache-test'
 
 object-non_persistent_groups = 'comment
 counts
@@ -1073,7 +1041,12 @@ discuss-avatar_cron = false
 ; O_DISCUSS_AVATAR_CACHE_TTL
 discuss-avatar_cache_ttl = 604800
 
-
+; O_OPTM_LOCALIZE	
+optm-localize = false	
+; O_OPTM_LOCALIZE_DOMAINS	
+optm-localize_domains = '### Popular scripts ###	
+https://platform.twitter.com/widgets.js	
+https://connect.facebook.net/en_US/fbevents.js'
 
 
 ;; -------------------------------------------------- ;;
@@ -1116,9 +1089,6 @@ media-iframe_lazy = false
 ; O_MEDIA_ADD_MISSING_SIZES
 media-add_missing_sizes = false
 
-; O_MEDIA_LAZYJS_INLINE
-media-lazyjs_inline = false
-
 ; O_MEDIA_LAZY_EXC
 media-lazy_exc = ''
 
@@ -1140,7 +1110,10 @@ media-lazy_uri_exc = ''
 ; O_MEDIA_LQIP_EXC
 media-lqip_exc = ''
 
-
+; O_MEDIA_VPI	
+media-vpi = false	
+; O_MEDIA_VPI_CRON	
+media-vpi_cron = false
 
 
 
@@ -1160,20 +1133,19 @@ img_optm-webp = true
 
 img_optm-lossless = false
 
-img_optm-exif = false
+img_optm-exif = true
 
-img_optm-webp_replace = false
 
-img_optm-webp_attr = 'img.src
-div.data-thumb
-img.data-src
-div.data-large_image
-img.retina_logo_url
-div.data-parallax-image
-video.poster'
-
-img_optm-webp_replace_srcset = false
-
+img_optm-webp_attr = 'img.src	
+div.data-thumb	
+img.data-src	
+img.data-lazyload	
+div.data-large_image	
+img.retina_logo_url	
+div.data-parallax-image	
+div.data-vc-parallax-image	
+video.poster'	
+img_optm-webp_replace_srcset = false	
 img_optm-jpg_quality = 82
 
 
@@ -1218,12 +1190,6 @@ crawler-cookies = ''
 ;; -------------------------------------------------- ;;
 ;; --------------                Misc           ----------------- ;;
 ;; -------------------------------------------------- ;;
-
-; O_MISC_HTACCESS_FRONT
-misc-htaccess_front = ''
-
-; O_MISC_HTACCESS_BACK
-misc-htaccess_back = ''
 
 ; O_MISC_HEARTBEAT_FRONT
 misc-heartbeat_front = false
@@ -1326,7 +1292,9 @@ filetype[0] = '.aac
 .png
 .svg
 .ttf
-.woff'
+.webp
+.woff	
+.woff2'
 
 ;;url[1] = 'https://2nd_CDN_url.com/'
 
@@ -1335,10 +1303,26 @@ filetype[0] = '.aac
 ; <------------ CDN Mapping Example END ------------------>
 EOM
 
-    if [ ! -f ${DOCHM}/wp-content/themes/${THEME}/functions.php.bk ]; then 
-        cp ${DOCHM}/wp-content/themes/${THEME}/functions.php ${DOCHM}/wp-content/themes/${THEME}/functions.php.bk
+    THEME_PATH="${DOCHM}/wp-content/themes/${THEME}"
+    if [ ! -f ${THEME_PATH}/functions.php ]; then
+        cat >> "${THEME_PATH}/functions.php" <<END
+<?php
+require_once( WP_CONTENT_DIR.'/../wp-admin/includes/plugin.php' );
+\$path = 'litespeed-cache/litespeed-cache.php' ;
+if (!is_plugin_active( \$path )) {
+    activate_plugin( \$path ) ;
+    rename( __FILE__ . '.bk', __FILE__ );
+}
+END
+        if [ ! -f ${THEME_PATH}/functions.php.bk ]; then
+            cat >> "${THEME_PATH}/functions.php.bk" <<END
+<?php 
+END
+        fi
+    elif [ ! -f ${THEME_PATH}/functions.php.bk ]; then 
+        cp ${THEME_PATH}/functions.php ${THEME_PATH}/functions.php.bk
         cked
-        ed ${DOCHM}/wp-content/themes/${THEME}/functions.php << END >>/dev/null 2>&1
+        ed ${THEME_PATH}/functions.php << END >>/dev/null 2>&1
 2i
 require_once( WP_CONTENT_DIR.'/../wp-admin/includes/plugin.php' );
 \$path = 'litespeed-cache/litespeed-cache.php' ;
@@ -1475,7 +1459,6 @@ init_setup(){
 centos_main_install(){
     centos_install_basic
     centos_install_ols
-    centos_install_php
     centos_install_memcached
     centos_install_redis
     centos_install_certbot
@@ -1486,7 +1469,6 @@ centos_main_install(){
 
 centos_main_config(){
     centos_config_ols
-    config_php
     centos_config_memcached
     centos_config_redis
     wp_main_config
@@ -1495,11 +1477,9 @@ centos_main_config(){
 ubuntu_main_install(){
     ubuntu_install_basic
     ubuntu_install_ols
-    ubuntu_install_php
     ubuntu_install_memcached
     ubuntu_install_redis
     ubuntu_install_certbot
-    ubuntu_install_postfix
     install_phpmyadmin
     install_wp_cli
     landing_pg
@@ -1507,7 +1487,6 @@ ubuntu_main_install(){
 
 ubuntu_main_config(){
     ubuntu_config_ols
-    config_php
     ubuntu_config_memcached
     ubuntu_config_redis   
     wp_main_config 

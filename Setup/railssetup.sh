@@ -51,15 +51,7 @@ check_os(){
         OSVER=$(cat /etc/redhat-release | awk '{print substr($4,1,1)}')
     elif [ -f /etc/lsb-release ] ; then
         OSNAME=ubuntu
-        OSNAMEVER=''
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=18." >/dev/null
-        if [ ${?} = 0 ] ; then
-            OSNAMEVER=UBUNTU18
-        fi
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=20." >/dev/null
-        if [ $? = 0 ] ; then
-            OSNAMEVER=UBUNTU20
-        fi            
+        OSNAMEVER="UBUNTU$(lsb_release -sr | awk -F '.' '{print $1}')"
     elif [ -f /etc/debian_version ] ; then
         OSNAME=debian
     fi         
@@ -140,10 +132,10 @@ ubuntu_install_basic(){
     apt-get -y install wget > /dev/null 2>&1
     apt-get -y install autoconf bison build-essential libssl-dev libyaml-dev libreadline6-dev \
       zlib1g-dev libncurses5-dev libffi-dev libgdbm-dev libsqlite3-dev > /dev/null 2>&1
-    if [ "${OSNAMEVER}" = 'UBUNTU20' ]; then 
-        apt-get -y install libgdbm6 > /dev/null 2>&1
-    else
+    if [ "${OSNAMEVER}" = 'UBUNTU18' ]; then 
         apt-get -y install libgdbm5 > /dev/null 2>&1
+    else
+        apt-get -y install libgdbm6 > /dev/null 2>&1
     fi    
 }
 
@@ -329,19 +321,22 @@ centos_install_certbot(){
     fi    
 }
 
-ubuntu_install_certbot(){
-    echoG "[Start] Install CertBot"
-    add-apt-repository universe > /dev/null 2>&1
+ubuntu_install_certbot(){       
+    echoG "Install CertBot" 
     if [ "${OSNAMEVER}" = 'UBUNTU18' ]; then
+        add-apt-repository universe > /dev/null 2>&1
         echo -ne '\n' | add-apt-repository ppa:certbot/certbot > /dev/null 2>&1
-    fi   
+    fi    
     apt-get update > /dev/null 2>&1
     apt-get -y install certbot > /dev/null 2>&1
-    if [ -e /usr/bin/certbot ]; then 
-        echoG '[End] Install CertBot'
+    if [ -e /usr/bin/certbot ] || [ -e /usr/local/bin/certbot ]; then 
+        if [ ! -e /usr/bin/certbot ]; then
+            ln -s /usr/local/bin/certbot /usr/bin/certbot
+        fi    
+        echoG 'Install CertBot finished'    
     else 
         echoR 'Please check CertBot'    
-    fi
+    fi    
 }
 
 restart_lsws(){

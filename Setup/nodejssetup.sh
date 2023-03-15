@@ -2,11 +2,10 @@
 # /********************************************************************
 # LiteSpeed NodeJS setup Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Copyright: (c) 2019-2020
-# @Version: 1.1
+# @Copyright: (c) 2019-2022
+# @Version: 1.2
 # *********************************************************************/
 LSWSFD='/usr/local/lsws'
-PHPVER=74
 USER='nobody'
 GROUP='nogroup'
 FIREWALLLIST="22 80 443"
@@ -16,7 +15,7 @@ PROJNAME='node'
 VHDOCROOT='/usr/local/lsws/Example/html'
 DEMOPROJECT="${VHDOCROOT}/${PROJNAME}"
 ALLERRORS=0
-NODEJSV='16'
+NODEJSV='18'
 NOWPATH=$(pwd)
 
 echoY(){
@@ -47,15 +46,7 @@ check_os(){
         OSVER=$(cat /etc/redhat-release | awk '{print substr($4,1,1)}')
     elif [ -f /etc/lsb-release ] ; then
         OSNAME=ubuntu  
-        OSNAMEVER=''
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=18." >/dev/null
-        if [ ${?} = 0 ] ; then
-            OSNAMEVER=UBUNTU18
-        fi
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=20." >/dev/null
-        if [ $? = 0 ] ; then
-            OSNAMEVER=UBUNTU20
-        fi              
+        OSNAMEVER="UBUNTU$(lsb_release -sr | awk -F '.' '{print $1}')"
     elif [ -f /etc/debian_version ] ; then
         OSNAME=debian
     fi         
@@ -114,8 +105,7 @@ ubuntu_install_basic(){
 install_ols(){
     cd /tmp/; wget -q https://raw.githubusercontent.com/litespeedtech/ols1clk/master/ols1clk.sh
     chmod +x ols1clk.sh
-    echo 'Y' | bash ols1clk.sh \
-    --lsphp ${PHPVER}
+    echo 'Y' | bash ols1clk.sh 
 }
 
 centos_install_ols(){
@@ -167,8 +157,8 @@ centos_install_certbot(){
 
 ubuntu_install_certbot(){
     echoG "Install CertBot"
-    add-apt-repository universe > /dev/null 2>&1
     if [ "${OSNAMEVER}" = 'UBUNTU18' ]; then
+        add-apt-repository universe > /dev/null 2>&1
         echo -ne '\n' | add-apt-repository ppa:certbot/certbot > /dev/null 2>&1
     fi   
     apt-get update > /dev/null 2>&1
@@ -294,7 +284,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, hostname, () => {
-  console.log(\`Server running at http://${hostname}:${port}/\`);
+  console.log(\`Server running at http://\${hostname}:\${port}/\`);
 });
 END
 }

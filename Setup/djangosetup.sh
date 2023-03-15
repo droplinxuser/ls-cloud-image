@@ -2,8 +2,8 @@
 # /********************************************************************
 # LiteSpeed Django setup Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Copyright: (c) 2019-2021
-# @Version: 1.2
+# @Copyright: (c) 2019-2022
+# @Version: 1.3
 # *********************************************************************/
 LSWSFD='/usr/local/lsws'
 USER='nobody'
@@ -11,17 +11,18 @@ GROUP='nogroup'
 FIREWALLLIST="22 80 443"
 LSWSCONF="${LSWSFD}/conf/httpd_config.conf"
 LSWSVHCONF="${LSWSFD}/conf/vhosts/Example/vhconf.conf"
-WSGINAME='wsgi-lsapi-1.8'
+WSGINAME='wsgi-lsapi-2.1'
 PROJNAME='demo'
 PROJAPPNAME='app'
 VHDOCROOT='/usr/local/lsws/Example/html'
 DEMOPROJECT="${VHDOCROOT}/${PROJNAME}"
 DEMOSETTINGS="${DEMOPROJECT}/${PROJNAME}/settings.py"
 ALLERRORS=0
-DJ_VER='>=3.2,<4.0'
+DJ_VER='>=3.2'
 PY_V=''
 V_ENV='ON'
 NOWPATH=$(pwd)
+ARG1=${1:-''}
 
 echoY() {
     echo -e "\033[38;5;148m${1}\033[39m"
@@ -50,15 +51,7 @@ check_os(){
         OSVER=$(cat /etc/redhat-release | awk '{print substr($4,1,1)}')
     elif [ -f /etc/lsb-release ] ; then
         OSNAME=ubuntu   
-        OSNAMEVER=''
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=18." >/dev/null
-        if [ ${?} = 0 ] ; then
-            OSNAMEVER=UBUNTU18
-        fi
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=20." >/dev/null
-        if [ $? = 0 ] ; then
-            OSNAMEVER=UBUNTU20
-        fi             
+        OSNAMEVER="UBUNTU$(lsb_release -sr | awk -F '.' '{print $1}')"        
     elif [ -f /etc/debian_version ] ; then
         OSNAME=debian
     fi         
@@ -195,23 +188,23 @@ centos_install_certbot(){
     fi    
 }
 
-ubuntu_install_certbot(){
-    echoG "Install CertBot"
-    add-apt-repository universe > /dev/null 2>&1
+ubuntu_install_certbot(){       
+    echoG "Install CertBot" 
     if [ "${OSNAMEVER}" = 'UBUNTU18' ]; then
+        add-apt-repository universe > /dev/null 2>&1
         echo -ne '\n' | add-apt-repository ppa:certbot/certbot > /dev/null 2>&1
-    fi   
+    fi    
     apt-get update > /dev/null 2>&1
     apt-get -y install certbot > /dev/null 2>&1
     if [ -e /usr/bin/certbot ] || [ -e /usr/local/bin/certbot ]; then 
         if [ ! -e /usr/bin/certbot ]; then
             ln -s /usr/local/bin/certbot /usr/bin/certbot
-        fi
-        echoG 'Install CertBot finished'
+        fi    
+        echoG 'Install CertBot finished'    
     else 
         echoR 'Please check CertBot'    
-    fi
-}    
+    fi    
+}
 
 restart_lsws(){
     echoG 'Restart LiteSpeed Web Server'
@@ -654,7 +647,7 @@ main(){
     end_message
 }
 
-case ${1} in
+case "${ARG1}" in
     -NOVENV|--no-venv)
         V_ENV='OFF'
         ;;

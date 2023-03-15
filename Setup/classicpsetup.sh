@@ -12,14 +12,14 @@ PHPCONF='/var/www/phpmyadmin'
 LSWSCONF="${LSWSFD}/conf/httpd_config.conf"
 WPVHCONF="${LSWSFD}/conf/vhosts/classicpress/vhconf.conf"
 EXAMPLECONF="${LSWSFD}/conf/vhosts/classicpress/vhconf.conf"
-PHPINICONF="${LSWSFD}/lsphp80/etc/php/8.0/litespeed/php.ini"
+PHPINICONF="${LSWSFD}/lsphp81/etc/php/8.1/litespeed/php.ini"
 MEMCACHECONF='/etc/memcached.conf'
 REDISSERVICE='/lib/systemd/system/redis-server.service'
 REDISCONF='/etc/redis/redis.conf'
 WPCONSTCONF="${DOCHM}/wp-content/plugins/litespeed-cache/data/const.default.ini"
 MARIADBSERVICE='/lib/systemd/system/mariadb.service'
 MARIADBCNF='/etc/mysql/mariadb.conf.d/60-server.cnf'
-PHPVER=80
+PHPVER=81
 FIREWALLLIST="22 80 443"
 USER='www-data'
 GROUP='www-data'
@@ -95,15 +95,7 @@ check_os()
         OSVER=$(cat /etc/redhat-release | awk '{print substr($4,1,1)}')
    elif [ -f /etc/lsb-release ] ; then
         OSNAME=ubuntu
-        OSNAMEVER=''
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=18." >/dev/null
-        if [ ${?} = 0 ] ; then
-            OSNAMEVER=UBUNTU18
-        fi
-        cat /etc/lsb-release | grep "DISTRIB_RELEASE=20." >/dev/null
-        if [ $? = 0 ] ; then
-            OSNAMEVER=UBUNTU20
-        fi    
+        OSNAMEVER="UBUNTU$(lsb_release -sr | awk -F '.' '{print $1}')"    
     elif [ -f /etc/debian_version ] ; then
         OSNAME=debian
     fi         
@@ -291,17 +283,17 @@ ubuntu_install_postfix(){
 
 ubuntu_install_certbot(){       
     echoG "Install CertBot" 
-    add-apt-repository universe > /dev/null 2>&1
     if [ "${OSNAMEVER}" = 'UBUNTU18' ]; then
+        add-apt-repository universe > /dev/null 2>&1
         echo -ne '\n' | add-apt-repository ppa:certbot/certbot > /dev/null 2>&1
-    fi  
+    fi    
     apt-get update > /dev/null 2>&1
     apt-get -y install certbot > /dev/null 2>&1
     if [ -e /usr/bin/certbot ] || [ -e /usr/local/bin/certbot ]; then 
         if [ ! -e /usr/bin/certbot ]; then
             ln -s /usr/local/bin/certbot /usr/bin/certbot
-        fi
-        echoG 'Install CertBot finished'
+        fi    
+        echoG 'Install CertBot finished'    
     else 
         echoR 'Please check CertBot'    
     fi    

@@ -147,6 +147,9 @@ cleanup (){
             sed -i 's/1/0/g' /etc/apt/apt.conf.d/10periodic
         fi 
     fi
+    if [ "${PROVIDER}" = 'do' ]; then 
+        apt-get purge droplet-agent -y > /dev/null 2>&1
+    fi    
     # Legal
     if [ -f /etc/legal ]; then
         mv /etc/legal /etc/legal.bk
@@ -155,13 +158,13 @@ cleanup (){
     mkdir -p /tmp
     rm -rf /tmp/*
     rm -rf /var/tmp/*
-    chmod 1777 /tmp
+    #chmod 1777 /tmp
     #cloud-init here
     rm -f /var/log/cloud-init.log
     rm -f /var/log/cloud-init-output.log
-    rm -rf /var/lib/cloud/data
-    rm -rf /var/lib/cloud/instance
-    rm -rf /var/lib/cloud/instances/*
+    #rm -rf /var/lib/cloud/data
+    #rm -rf /var/lib/cloud/instance
+    #rm -rf /var/lib/cloud/instances/*
     #system log
     rm -rf /var/log/unattended-upgrades
     rm -f /var/log/apt/history.log*
@@ -244,6 +247,7 @@ cleanup (){
         for i in ${ALL_HMFD[@]}; do
             if [ "${i}" != 'ubuntu' ] && [ "${i}" != 'cyberpanel' ] && [ "${i}" != 'vmail' ] && [ "${i}" != 'docker' ]; then
                 rm -rf "/home/${i}"
+                deluser "$i"
             fi
         done  
     fi

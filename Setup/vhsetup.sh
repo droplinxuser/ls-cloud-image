@@ -2,23 +2,26 @@
 # /********************************************************************
 # LiteSpeed domain setup Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Copyright: (c) 2019-2021
-# @Version: 2.0.2
+# @Copyright: (c) 2019-2023
+# @Version: 2.3
 # *********************************************************************/
 MY_DOMAIN=''
 MY_DOMAIN2=''
 WWW_PATH='/var/www'
+CUSTOM_PATH=''
 LSDIR='/usr/local/lsws'
 WEBCF="${LSDIR}/conf/httpd_config.conf"
 VHDIR="${LSDIR}/conf/vhosts"
 EMAIL='localhost'
 WWW='FALSE'
+BACKUP='OFF'
 BOTCRON='/etc/cron.d/certbot'
 PLUGINLIST="litespeed-cache.zip"
 CKREG="^[a-z0-9!#\$%&'*+/=?^_\`{|}~-]+(\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*\
 @([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?\$"
 THEME='twentytwenty'
 PHPVER=lsphp74
+WEBSERVER='OLS'
 USER='www-data'
 GROUP='www-data'
 DOMAIN_PASS='ON'
@@ -68,6 +71,11 @@ show_help() {
         echo "${EPACE}${EPACE}Issue and install Let's encrypt certificate and Wordpress with LiteSpeed Cache plugin."
         echow "-C, --classicpress"
         echo "${EPACE}${EPACE}This will install a ClassicPress with LiteSpeed Cache plugin."   
+        echow "--path, --document-path [CUSTOM_PATH]"
+        echo "${EPACE}${EPACE}This is to specify a location for the document root."  
+        echo "${EPACE}${EPACE}Example: ./vhsetup.sh --path /var/www/html"        
+        echow "-BK, --backup"
+        echo "${EPACE}${EPACE}This will backup the lsws server config before changing anything, vhost config is not included."
         echow "--delete [DOMAIN_NAME]"
         echo "${EPACE}${EPACE}This will remove the domain from listener and virtual host config, the document root will remain."
         echow '-H, --help'
@@ -143,8 +151,36 @@ check_php_version(){
     fi
 }
 
+check_webserver(){
+    if [ -e ${LSDIR}/bin/openlitespeed ]; then
+        if [ -e "${WEBCF}" ]; then
+            WEBSERVER='OLS'
+            VH_CONF_FILE="${VHDIR}/${MY_DOMAIN}/vhconf.conf"
+        else
+            echoR "${WEBCF} does not exist, exit!"
+            exit 1  
+        fi
+    else 
+        if [ -e "${LSDIR}/conf/httpd_config.xml" ]; then
+            WEBSERVER='LSWS'
+            WEBCF="${LSDIR}/conf/httpd_config.xml"
+            VH_CONF_FILE="${VHDIR}/${MY_DOMAIN}/vhconf.xml"
+        else 
+            echoR 'No web serevr detect, exit!'
+            exit 2
+        fi
+    fi    
+}
+
 fst_match_line(){
     FIRST_LINE_NUM=$(grep -n -m 1 "${1}" "${2}" | awk -F ':' '{print $1}')
+}
+fst_match_before(){
+    FIRST_NUM_BEFORE=$(grep -B 5 ${1} ${2} | grep -n -m 1 ${3} | awk -F ':' '{print $1}')
+}
+fst_match_before_line(){
+    fst_match_before ${1} ${2} ${3}
+    FIRST_BEFORE_LINE_NUM=$((${FIRST_LINE_NUM}+${FIRST_NUM_BEFORE}-1))
 }
 fst_match_after(){
     FIRST_NUM_AFTER=$(tail -n +${1} ${2} | grep -n -m 1 ${3} | awk -F ':' '{print $1}')
@@ -173,7 +209,7 @@ create_file(){
 }
 create_folder(){
     if [ ! -d "${1}" ]; then
-        mkdir ${1}
+        mkdir -p ${1}
     fi
 }
 change_owner() {
@@ -202,8 +238,65 @@ install_wp_cli() {
         fi        
     fi      
 }
+ubuntu_install_certbot(){       
+    apt-get update > /dev/null 2>&1
+    apt-get -y install certbot > /dev/null 2>&1
+    if [ -e /usr/bin/certbot ] || [ -e /usr/local/bin/certbot ]; then 
+        if [ ! -e /usr/bin/certbot ]; then
+            ln -s /usr/local/bin/certbot /usr/bin/certbot
+        fi    
+        echoG 'Install CertBot finished'    
+    else 
+        echoR 'Please check CertBot'    
+    fi    
+}
+
+centos_install_certbot(){
+    if [ ${OSVER} = 8 ]; then
+        wget -q https://dl.eff.org/certbot-auto
+        mv certbot-auto /usr/local/bin/certbot
+        chown root /usr/local/bin/certbot
+        chmod 0755 /usr/local/bin/certbot
+        echo "y" | /usr/local/bin/certbot > /dev/null 2>&1
+    else
+        yum -y install certbot  > /dev/null 2>&1
+    fi
+    if [ -e /usr/bin/certbot ] || [ -e /usr/local/bin/certbot ]; then 
+        if [ ! -e /usr/bin/certbot ]; then
+            ln -s /usr/local/bin/certbot /usr/bin/certbot
+        fi
+        echoG 'Install CertBot finished'
+    else 
+        echoR 'Please check CertBot'    
+    fi    
+} 
+
+install_certbot(){
+    if [ ! -e /usr/bin/certbot ] && [ ! -e /usr/local/bin/certbot ]; then
+        echoG "Install CertBot" 
+        if [ ${OSNAME} = 'centos' ]; then
+            centos_install_certbot
+        else
+            ubuntu_install_certbot 
+        fi
+    fi
+}
+
+install_unzip(){
+    if [ ! -e /usr/bin/unzip ]; then
+        echoG "Install unzip" 
+        if [ ${OSNAME} = 'centos' ]; then
+            yum install unzip -y > /dev/null 2>&1
+        else
+            apt install unzip -y > /dev/null 2>&1
+        fi
+    fi    
+}
+
 gen_password(){
-    ROOT_PASS=$(cat ${HM_PATH}/.db_password | head -n 1 | awk -F '"' '{print $2}')
+    if [ -e ${HM_PATH}/.db_password ]; then
+        ROOT_PASS=$(cat ${HM_PATH}/.db_password | head -n 1 | awk -F '"' '{print $2}')
+    fi    
     WP_DB=$(echo "${MY_DOMAIN}" | sed -e 's/\.//g; s/-//g')
     WP_USER=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 8; echo '')
     WP_PASS=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 48; echo '')
@@ -271,16 +364,32 @@ install_wp_plugin(){
 }
 
 set_lscache(){
-    if [ ! -f ${DOCHM}/wp-content/themes/${THEME}/functions.php.bk ]; then
-        cp ${DOCHM}/wp-content/themes/${THEME}/functions.php ${DOCHM}/wp-content/themes/${THEME}/functions.php.bk
-        install_ed
-        ed ${DOCHM}/wp-content/themes/${THEME}/functions.php <<END >>/dev/null 2>&1
+    THEME_PATH="${DOCHM}/wp-content/themes/${THEME}"
+    if [ ! -f ${THEME_PATH}/functions.php ]; then
+        cat >> "${THEME_PATH}/functions.php" <<END
+<?php
+require_once( WP_CONTENT_DIR.'/../wp-admin/includes/plugin.php' );
+\$path = 'litespeed-cache/litespeed-cache.php' ;
+if (!is_plugin_active( \$path )) {
+    activate_plugin( \$path ) ;
+    rename( __FILE__ . '.bk', __FILE__ );
+}
+END
+        if [ ! -f ${THEME_PATH}/functions.php.bk ]; then
+            cat >> "${THEME_PATH}/functions.php.bk" <<END
+<?php 
+END
+        fi
+    elif [ ! -f ${THEME_PATH}/functions.php.bk ]; then 
+        cp ${THEME_PATH}/functions.php ${THEME_PATH}/functions.php.bk
+        cked
+        ed ${THEME_PATH}/functions.php << END >>/dev/null 2>&1
 2i
 require_once( WP_CONTENT_DIR.'/../wp-admin/includes/plugin.php' );
 \$path = 'litespeed-cache/litespeed-cache.php' ;
 if (!is_plugin_active( \$path )) {
-  activate_plugin( \$path ) ;
-  rename( __FILE__ . '.bk', __FILE__ );
+    activate_plugin( \$path ) ;
+    rename( __FILE__ . '.bk', __FILE__ );
 }
 .
 w
@@ -301,6 +410,26 @@ create_db_user(){
             echoR "something went wrong when create new database, please proceed to manual installtion."
             DB_TEST=1
         fi
+    elif [ -e /usr/local/lsws/password ]; then
+        grep mysql /usr/local/lsws/password | grep root | awk -F'[][]' '{print $2}'  >/dev/null
+        if [ ${?} = 0 ]; then
+            echoG 'Found SQL password in /usr/local/lsws/password file.'
+            ROOT_PASS=$(grep mysql /usr/local/lsws/password | grep root | awk -F'[][]' '{print $2}')
+            gen_password
+            mysql -uroot -p${ROOT_PASS} -e "create database ${WP_DB};"
+            if [ ${?} = 0 ]; then
+                mysql -uroot -p${ROOT_PASS} -e "CREATE USER '${WP_USER}'@'localhost' IDENTIFIED BY '${WP_PASS}';"
+                mysql -uroot -p${ROOT_PASS} -e "GRANT ALL PRIVILEGES ON * . * TO '${WP_USER}'@'localhost';"
+                mysql -uroot -p${ROOT_PASS} -e "FLUSH PRIVILEGES;"
+            else
+                echoR "something went wrong when create new database, please proceed to manual installtion."
+                DB_TEST=1
+            fi            
+        else
+            echoR "No DataBase Password, skip!"  
+            DB_TEST=1
+            show_help 3
+        fi    
     else
         echoR "No DataBase Password, skip!"  
         DB_TEST=1
@@ -425,12 +554,10 @@ check_duplicate() {
 }
 
 restart_lsws(){
-    ${LSDIR}/bin/lswsctrl stop >/dev/null 2>&1
-    systemctl stop lsws >/dev/null 2>&1
-    systemctl start lsws >/dev/null 2>&1   
+    systemctl restart lsws >/dev/null 2>&1
 }
 
-set_vh_conf() {
+set_ols_vh_conf() {
     create_folder "${DOCHM}"
     create_folder "${VHDIR}/${MY_DOMAIN}"
     if [ ! -f "${DOCHM}/index.php" ]; then
@@ -440,12 +567,12 @@ phpinfo();
 EOF
         change_owner
     fi
-    if [ ! -f "${VHDIR}/${MY_DOMAIN}/vhconf.conf" ]; then
-        cat > ${VHDIR}/${MY_DOMAIN}/vhconf.conf << EOF
+    if [ ! -f "${VH_CONF_FILE}" ]; then
+        cat > ${VH_CONF_FILE} << EOF
 docRoot                   \$VH_ROOT
 vhDomain                  \$VH_DOMAIN
 vhAliases                 www.$VH_DOMAIN
-adminEmails               localhost
+adminEmails               localhost@example
 enableGzip                1
 
 errorlog \$SERVER_ROOT/logs/\$VH_NAME.error_log {
@@ -510,7 +637,47 @@ EOF
         echoR "Targeted file already exist, skip!"
     fi
 }
-set_server_conf() {
+
+set_lsws_vh_conf() {
+    create_folder "${DOCHM}"
+    create_folder "${VHDIR}/${MY_DOMAIN}"
+    if [ ! -f "${DOCHM}/index.php" ]; then
+        cat <<'EOF' >${DOCHM}/index.php
+<?php
+phpinfo();
+EOF
+        change_owner
+    fi
+    if [ ! -f "${VH_CONF_FILE}" ]; then
+        cat > ${VH_CONF_FILE} << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<virtualHostConfig>
+  <docRoot>\$VH_ROOT</docRoot>
+  <vhDomain>$VH_DOMAIN</vhDomain>
+  <adminEmails>localhost</adminEmails>
+  <index>
+    <useServer>0</useServer>
+    <indexFiles>index.php, index.html</indexFiles>
+  </index>
+  <rewrite>
+    <enable>1</enable>
+    <autoLoadHtaccess>1</autoLoadHtaccess>
+  </rewrite>
+  <vhssl>
+    <keyFile>${LSDIR}/conf/example.key</keyFile>
+    <certFile>${LSDIR}/conf/example.crt</certFile>
+    <certChain>1</certChain>
+  </vhssl>
+</virtualHostConfig>
+EOF
+        chown -R lsadm:lsadm ${VHDIR}/*
+    else
+        echoR "Targeted file already exist, skip!"
+    fi
+}
+
+
+set_ols_server_conf() {
     if [ ${WWW} = 'TRUE' ]; then
         NEWKEY="map                     ${MY_DOMAIN2} ${MY_DOMAIN}, ${MY_DOMAIN2}"
         local TEMP_DOMAIN=${MY_DOMAIN2}
@@ -526,34 +693,93 @@ set_server_conf() {
     else
         echoR 'No listener port detected, listener setup skip!'    
     fi
+    if [ "${CUSTOM_PATH}" = '' ]; then
+        CUSTOM_PATH="${WWW_PATH}/${MY_DOMAIN}"
+    fi    
     echo "
 virtualhost ${TEMP_DOMAIN} {
-vhRoot                  ${WWW_PATH}/${MY_DOMAIN}
-configFile              ${VHDIR}/${MY_DOMAIN}/vhconf.conf
+vhRoot                  "${CUSTOM_PATH}"
+configFile              ${VH_CONF_FILE}
 allowSymbolLink         1
 enableScript            1
 restrained              1
 }" >>${WEBCF}
 }
-update_vh_conf(){
-    sed -i 's|localhost|'${EMAIL}'|g' ${VHDIR}/${MY_DOMAIN}/vhconf.conf
-    sed -i 's|'${LSDIR}'/conf/example.key|/etc/letsencrypt/live/'${MY_DOMAIN}'/privkey.pem|g' ${VHDIR}/${MY_DOMAIN}/vhconf.conf
-    sed -i 's|'${LSDIR}'/conf/example.crt|/etc/letsencrypt/live/'${MY_DOMAIN}'/fullchain.pem|g' ${VHDIR}/${MY_DOMAIN}/vhconf.conf
+
+update_ssl_vh_conf(){
+    sed -i 's|localhost|'${EMAIL}'|g' ${VH_CONF_FILE}
+    sed -i 's|'${LSDIR}'/conf/example.key|/etc/letsencrypt/live/'${MY_DOMAIN}'/privkey.pem|g' ${VH_CONF_FILE}
+    sed -i 's|'${LSDIR}'/conf/example.crt|/etc/letsencrypt/live/'${MY_DOMAIN}'/fullchain.pem|g' ${VH_CONF_FILE}
     echoG "\ncertificate has been successfully installed..."  
 }
+
+set_lsws_server_conf(){
+    if [ ${WWW} = 'TRUE' ]; then
+        NEWKEY="\\
+      <vhostMap>\n\
+          <vhost>${MY_DOMAIN2}</vhost>\n\
+          <domain>${MY_DOMAIN2}, ${MY_DOMAIN}</domain>\n\
+      </vhostMap>"
+        local TEMP_DOMAIN=${MY_DOMAIN2}
+    else
+        NEWKEY="\\
+      <vhostMap>\n\
+          <vhost>${MY_DOMAIN}</vhost>\n\
+          <domain>${MY_DOMAIN}</domain>\n\
+      </vhostMap>"
+        local TEMP_DOMAIN=${MY_DOMAIN}
+    fi
+    MATCH_ARR=$(grep -n '<vhostMapList>' ${WEBCF} | cut -f1 -d: | sort -nr)
+    if [ ${#MATCH_ARR[@]} != 0 ]; then
+        for LINENUM in ${MATCH_ARR[@]}; do
+            LINENUM=$((${LINENUM}+1))
+            sed -i "${LINENUM}i${NEWKEY}" ${WEBCF}
+        done
+    else
+        echoR 'No listener port detected, listener setup skip!'    
+    fi
+
+    if [ "${CUSTOM_PATH}" = '' ]; then
+        CUSTOM_PATH="${WWW_PATH}/${MY_DOMAIN}"
+    fi
+
+   NEWKEY=" \\
+    <virtualHost>\n\
+      <name>${TEMP_DOMAIN}</name>\n\
+      <vhRoot>"${CUSTOM_PATH}"</vhRoot>\n\
+      <configFile>${VH_CONF_FILE}</configFile>\n\
+      <allowSymbolLink>1</allowSymbolLink>\n\
+      <enableScript>1</enableScript>\n\
+      <restrained>0</restrained>\n\
+    </virtualHost>"
+
+    line_insert '<virtualHostList>'  ${WEBCF} "${NEWKEY}" 1
+}
+
+
 main_set_vh(){
     create_folder ${WWW_PATH}
-    DOCHM="${WWW_PATH}/${1}"
+    if [ "${CUSTOM_PATH}" = '' ]; then
+        DOCHM="${WWW_PATH}/${1}"
+    else
+        DOCHM="${CUSTOM_PATH}"
+        create_folder ${CUSTOM_PATH}
+    fi    
     if [ ${DOMAIN_SKIP} = 'OFF' ]; then
-        set_vh_conf
-        set_server_conf
+        if [ "${WEBSERVER}" = 'OLS' ]; then
+            set_ols_vh_conf
+            set_ols_server_conf
+        elif [ "${WEBSERVER}" = 'LSWS' ]; then
+            set_lsws_vh_conf
+            set_lsws_server_conf
+        fi            
         restart_lsws
         echoG "Vhost created success!"
     fi    
 }
 
-rm_vh_conf(){
-    if [ -f "${VHDIR}/${MY_DOMAIN}/vhconf.conf" ]; then
+rm_ols_vh_conf(){
+    if [ -f "${VH_CONF_FILE}" ]; then
         echoG "Remove virtual host config: ${VHDIR}/${MY_DOMAIN}"
         rm -rf "${VHDIR}/${MY_DOMAIN}"
     elif [ -f "${VHDIR}/${MY_DOMAIN2}/vhconf.conf" ]; then
@@ -563,22 +789,41 @@ rm_vh_conf(){
         echoG "Remove virtual host config: ${VHDIR}/www.${MY_DOMAIN}"
         rm -rf "${VHDIR}/www.${MY_DOMAIN}"
     else
-        echoR "${VHDIR}/${MY_DOMAIN}/vhconf.conf does not exist, skip!" 
+        echoR "${VH_CONF_FILE} does not exist, skip!" 
     fi
 }
 
-rm_dm_svr_conf(){
+rm_dm_ols_svr_conf(){
     echoG 'Remove domain from listeners'
     sed -i "/map.*${1}/d" ${WEBCF}
     grep "virtualhost ${1}" ${WEBCF} >/dev/null 2>&1
     if [ ${?} = 0 ]; then
-    fst_match_line "virtualhost ${1}" ${WEBCF}
+        fst_match_line "virtualhost ${1}" ${WEBCF}
         lst_match_line ${FIRST_LINE_NUM} ${WEBCF} '}'
         echoG 'Remove the virtual host from serevr config'
         sed -i "${FIRST_LINE_NUM},${LAST_LINE_NUM}d" ${WEBCF}
     else
         echoR "virtualhost ${1} does not found, if this is the default virtual host config, please remove it manually!"
     fi    
+}
+
+rm_lsws_vh_conf(){
+    if [ -f "${VH_CONF_FILE}" ]; then
+        echoG "Remove virtual host config: ${VHDIR}/${MY_DOMAIN}"
+        rm -rf "${VHDIR}/${MY_DOMAIN}"
+    elif [ -f "${VHDIR}/${MY_DOMAIN2}/vhconf.xml" ]; then
+        echoG "Remove virtual host config: ${VHDIR}/${MY_DOMAIN2}"
+        rm -rf "${VHDIR}/${MY_DOMAIN2}"
+    elif [ -f "${VHDIR}/www.${MY_DOMAIN}/vhconf.xml" ]; then
+        echoG "Remove virtual host config: ${VHDIR}/www.${MY_DOMAIN}"
+        rm -rf "${VHDIR}/www.${MY_DOMAIN}"
+    else
+        echoR "${VH_CONF_FILE} does not exist, skip!" 
+    fi
+}
+
+rm_dm_lsws_svr_conf(){
+    echoY 'Remove LSWS VirtualHost does not support yet!' 
 }
 
 rm_le_cert(){
@@ -588,21 +833,38 @@ rm_le_cert(){
 }
 
 rm_main_conf(){
-    grep -w "map.*[[:space:]]${MY_DOMAIN}" ${WEBCF} >/dev/null 2>&1
-    if [ ${?} = 0 ]; then
-        echoG "Domain exist, continue deleting.."
-        rm_vh_conf
-        rm_dm_svr_conf ${MY_DOMAIN2}
-        restart_lsws
-        echoG "Domain remove finished!"
-    else 
-        echoR "Domain does not exist, exit!"  
-        exit 1       
-    fi  
+
+    if [ "${WEBSERVER}" = 'OLS' ]; then
+        grep -w "map.*[[:space:]]${MY_DOMAIN}" ${WEBCF} >/dev/null 2>&1
+        if [ ${?} = 0 ]; then
+            echoG "Domain exist, continue deleting.."        
+            rm_ols_vh_conf
+            rm_dm_ols_svr_conf ${MY_DOMAIN2}
+            restart_lsws
+            echoG "Domain remove finished!"
+        else 
+            echoR "Domain does not exist, exit!"  
+            exit 1       
+        fi     
+    elif [ "${WEBSERVER}" = 'LSWS' ]; then
+        grep -w "<vhost>${MY_DOMAIN}" ${WEBCF} >/dev/null 2>&1
+        if [ ${?} = 0 ]; then
+            echoG "Domain exist, continue deleting.." 
+            rm_lsws_vh_conf
+            rm_dm_lsws_svr_conf ${MY_DOMAIN2}
+            restart_lsws
+            echoG "Domain remove finished!"
+        else 
+            echoR "Domain does not exist, exit!"  
+            exit 1       
+        fi
+    fi
+
+
 }
 
 verify_domain() {
-    curl -Is http://${MY_DOMAIN}/ | grep -i LiteSpeed >/dev/null 2>&1
+    curl -Is http://${MY_DOMAIN}/ | grep -i 'LiteSpeed\|cloudflare' >/dev/null 2>&1
     if [ ${?} = 0 ]; then
         echoG "${MY_DOMAIN} check PASS"
     else
@@ -610,7 +872,7 @@ verify_domain() {
         DOMAIN_PASS='OFF'
     fi
     if [ ${WWW} = 'TRUE' ]; then
-        curl -Is http://${MY_DOMAIN}/ | grep -i LiteSpeed >/dev/null 2>&1
+        curl -Is http://${MY_DOMAIN}/ | grep -i 'LiteSpeed\|cloudflare' >/dev/null 2>&1
         if [ ${?} = 0 ]; then
             echoG "${MY_DOMAIN2} check PASS"
         else
@@ -644,7 +906,7 @@ apply_lecert() {
         certbot certonly --non-interactive --agree-tos -m ${EMAIL} --webroot -w ${DOCHM} -d ${MY_DOMAIN} --key-type ecdsa
     fi
     if [ ${?} -eq 0 ]; then
-        update_vh_conf
+        update_ssl_vh_conf    
     else
         echoR "Oops, something went wrong..."
         exit 1
@@ -719,6 +981,17 @@ check_www_domain(){
         MY_DOMAIN2="${1}"
     fi
 }
+
+server_conf_bk(){
+    if [ "${BACKUP}" = 'ON' ]; then
+        local TIME_VER=$(date +%s)
+        echoG "Back up server config to ${WEBCF}.${TIME_VER}"
+        if [ ! -f ${WEBCF}.${TIME_VER} ]; then
+            cp "${WEBCF}" "${WEBCF}.${TIME_VER}"
+        fi
+    fi
+}
+
 domain_input(){
     if [ ${SILENT} = 'OFF' ]; then
         while true; do
@@ -754,6 +1027,7 @@ issue_cert(){
         if [ ${DOMAIN_PASS} = 'ON' ]; then
             input_email
             if [ ${EMAIL_SKIP} = 'OFF' ]; then
+                install_certbot
                 apply_lecert
                 certbothook
             fi    
@@ -774,8 +1048,11 @@ main() {
     check_os
     check_php_version
     domain_input
+    check_webserver
+    server_conf_bk    
     main_set_vh ${MY_DOMAIN}
     issue_cert
+    install_unzip
 	check_which_cms
     check_install_wp
 	check_install_cp
@@ -784,8 +1061,10 @@ main() {
 }
 
 main_delete(){
+    check_webserver
     check_empty ${1}
     check_www_domain ${1}
+    server_conf_bk
     rm_le_cert
     rm_main_conf
 }
@@ -812,6 +1091,9 @@ while [ ! -z "${1}" ]; do
         -[fF] | --force-https)
             FORCE_HTTPS='ON'
         ;;
+        -BK | --backup)
+            BACKUP='ON'
+        ;;    
         -[hH] | --help)
             show_help 1
         ;;
@@ -820,6 +1102,14 @@ while [ ! -z "${1}" ]; do
         ;;
         -[cC] | --classicpress)
             CLASSICPRESS='ON'
+        ;;
+        --path | --document-path) shift
+            if [ "${1}" = '' ]; then
+                show_help 1
+            else
+                CUSTOM_PATH="${1}"
+                SILENT='ON'
+            fi
         ;;
         --delete) shift
             if [ "${1}" = '' ]; then

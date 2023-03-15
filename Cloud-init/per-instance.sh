@@ -2,7 +2,7 @@
 # /********************************************************************
 # LiteSpeed Cloud Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Copyright: (c) 2018-2021
+# @Copyright: (c) 2018-2022
 # *********************************************************************/
 PANEL=''
 PANELPATH=''
@@ -14,6 +14,10 @@ if [ -e "${LSDIR}/conf/vhosts/wordpress/vhconf.conf" ]; then
     LSVHCFPATH="${LSDIR}/conf/vhosts/wordpress/vhconf.conf"
 elif [ -e "${LSDIR}/conf/vhosts/classicpress/vhconf.conf" ]; then
     LSVHCFPATH="${LSDIR}/conf/vhosts/classicpress/vhconf.conf"    
+elif [ -e "${LSDIR}/conf/vhosts/joomla/vhconf.conf" ]; then
+    LSVHCFPATH="${LSDIR}/conf/vhosts/joomla/vhconf.conf"
+elif [ -e "${LSDIR}/conf/vhosts/drupal/vhconf.conf" ]; then
+    LSVHCFPATH="${LSDIR}/conf/vhosts/drupal/vhconf.conf"        
 else
     LSVHCFPATH="${LSDIR}/conf/vhosts/Example/vhconf.conf"
 fi
@@ -107,10 +111,28 @@ update_path()
                 BANNERNAME='cyberwordpress'
             fi
         fi
+        APP_DOVECOT_CF='/etc/dovecot/dovecot-sql.conf.ext'
+        APP_POSTFIX_DOMAINS_CF='/etc/postfix/mysql-virtual_domains.cf'
+        APP_POSTFIX_EMAIL2EMAIL_CF='/etc/postfix/mysql-virtual_email2email.cf'
+        APP_POSTFIX_FORWARDINGS_CF='/etc/postfix/mysql-virtual_forwardings.cf'
+        APP_POSTFIX_MAILBOXES_CF='/etc/postfix/mysql-virtual_mailboxes.cf'
+
+        if [ ${OSNAME} = 'ubuntu' ] || [ ${OSNAME} = 'debian' ]; then
+            APP_PUREFTP_CF='/etc/pure-ftpd/pureftpd-mysql.conf'
+            APP_PUREFTPDB_CF='/etc/pure-ftpd/db/mysql.conf'
+            APP_POWERDNS_CF='/etc/powerdns/pdns.conf'
+        elif [ ${OSNAME} = 'centos' ]; then
+            APP_PUREFTP_CF='/etc/pure-ftpd/pureftpd-mysql.conf'
+            APP_PUREFTPDB_CF='/etc/pure-ftpd/pureftpd-mysql.conf'
+            APP_POWERDNS_CF='/etc/pdns/pdns.conf'
+        fi        
     elif [ "${PANEL}" = '' ]; then
         PHPMYPATH='/var/www/phpmyadmin' 
         DOCPATH='/var/www/html'
-        if [ -f '/usr/bin/node' ] && [ "$(grep -n 'appType.*node' ${LSVHCFPATH})" != '' ]; then
+        if [ ${EDITION} = 'litespeed' ]; then
+            WPCT="${PROVIDER}_lsws"
+            BANNERNAME='litespeed'         
+        elif [ -f '/usr/bin/node' ] && [ "$(grep -n 'appType.*node' ${LSVHCFPATH})" != '' ]; then
             APPLICATION='NODE'
             WPCT="${PROVIDER}_ols_node"
             BANNERNAME='nodejs'
@@ -122,13 +144,16 @@ update_path()
             APPLICATION='PYTHON'
             CONTEXTPATH="${LSDIR}/Example/html/demo/demo/settings.py"
             WPCT="${PROVIDER}_ols_python"
-            BANNERNAME='django'
+            BANNERNAME='django'      
         else
-            APPLICATION='NONE' 
+            APPLICATION='CMS' 
             DOCPATH='/var/www/html.old'
             if [ -d ${DOCPATH}/administrator ]; then 
                 WPCT="${PROVIDER}_ols_joomla"
                 BANNERNAME='joomla'
+            elif [ -d ${DOCPATH}/web/sites ]; then 
+                WPCT="${PROVIDER}_ols_drupal"
+                BANNERNAME='drupal'                
             else 
                 grep -i ClassicPress ${DOCPATH}/license.txt >/dev/null
                 if [ ${?} = 0 ]; then
@@ -177,7 +202,6 @@ main_env_check(){
     update_path
     os_home_path
 }
-
 main_env_check
 
 rm_dummy(){
@@ -204,7 +228,7 @@ ct_version()
 }
 
 setup_domain(){
-    if [ ! -e /opt/domainsetup.sh ]; then  
+    if [ ! -e /opt/domainsetup.sh ] && [ ${EDITION} != 'litespeed' ]; then
         STATUS="$(curl -s https://raw.githubusercontent.com/litespeedtech/ls-cloud-image/master/Setup/domainsetup.sh \
         -o /opt/domainsetup.sh -w "%{http_code}")"
         if [ ${?} != 0 ] || [ "${STATUS}" != '200' ]; then
@@ -226,7 +250,7 @@ setup_banner(){
 
 db_passwordfile()
 {
-    if [ "${APPLICATION}" = 'NONE' ] || [ "${PANEL}" = 'cyber' ]; then
+    if [ "${APPLICATION}" = 'CMS' ] || [ "${PANEL}" = 'cyber' ]; then
         if [ ! -e "${HMPATH}/.db_password" ]; then
             touch "${HMPATH}/.db_password"
             DBPASSPATH="${HMPATH}/.db_password"
@@ -242,22 +266,7 @@ litespeed_passwordfile()
         touch "${HMPATH}/.litespeed_password"
     fi
     LSPASSPATH="${HMPATH}/.litespeed_password"
-    }
-    APP_DOVECOT_CF='/etc/dovecot/dovecot-sql.conf.ext'
-    APP_POSTFIX_DOMAINS_CF='/etc/postfix/mysql-virtual_domains.cf'
-    APP_POSTFIX_EMAIL2EMAIL_CF='/etc/postfix/mysql-virtual_email2email.cf'
-    APP_POSTFIX_FORWARDINGS_CF='/etc/postfix/mysql-virtual_forwardings.cf'
-    APP_POSTFIX_MAILBOXES_CF='/etc/postfix/mysql-virtual_mailboxes.cf'
-
-    if [ ${OSNAME} = 'ubuntu' ] || [ ${OSNAME} = 'debian' ]; then
-        APP_PUREFTP_CF='/etc/pure-ftpd/pureftpd-mysql.conf'
-        APP_PUREFTPDB_CF='/etc/pure-ftpd/db/mysql.conf'
-        APP_POWERDNS_CF='/etc/powerdns/pdns.conf'
-    elif [ ${OSNAME} = 'centos' ]; then
-        APP_PUREFTP_CF='/etc/pure-ftpd/pureftpd-mysql.conf'
-        APP_PUREFTPDB_CF='/etc/pure-ftpd/pureftpd-mysql.conf'
-        APP_POWERDNS_CF='/etc/pdns/pdns.conf'
-    fi
+}
 
 gen_lsws_pwd()
 {
@@ -267,7 +276,7 @@ gen_lsws_pwd()
 
 gen_sql_pwd(){
     root_mysql_pass=$(openssl rand -hex 24)
-    wordpress_mysql_pass=$(openssl rand -hex 24)
+    app_mysql_pass=$(openssl rand -hex 24)
     debian_sys_maint_mysql_pass=$(openssl rand -hex 24)
 }
 gen_salt_pwd(){
@@ -359,8 +368,8 @@ passftp_IP_update(){
 }
 
 filepermission_update(){
-    chmod 600 ${HMPATH}/.db_password
-    chmod 600 ${HMPATH}/.litespeed_password
+    chmod 600 ${DBPASSPATH}
+    chmod 600 ${LSPASSPATH}
 }
 
 update_secretkey(){
@@ -419,28 +428,32 @@ update_CPsqlpwd(){
 }
 
 renew_wp_pwd(){
-    NEWDBPWD="define('DB_PASSWORD', '${wordpress_mysql_pass}');"
+    NEWDBPWD="define('DB_PASSWORD', '${app_mysql_pass}');"
     linechange 'DB_PASSWORD' ${WPCFPATH} "${NEWDBPWD}"
 }
 
 replace_litenerip(){
-    if [ "${PROVIDER}" = 'do' ] && [ "${PANEL}" = '' ]; then 
-        for LINENUM in $(grep -n 'map' ${LSHTTPDCFPATH} | cut -d: -f 1)
-        do
-            if [ -e /var/www/html ] || [ -e /var/www/html.old ]; then 
-                if [ "${BANNERNAME}" = 'wordpress' ]; then
-                    NEWDBPWD="  map                     wordpress ${PUBIP}"
-                elif [ "${BANNERNAME}" = 'classicpress' ]; then
-                    NEWDBPWD="  map                     classicpress ${PUBIP}"
-                elif [ "${BANNERNAME}" = 'joomla' ]; then
-                    NEWDBPWD="  map                     joomla ${PUBIP}"
+    if [ "${EDITION}" != 'litespeed' ]; then 
+        if [ "${PROVIDER}" = 'do' ] && [ "${PANEL}" = '' ]; then 
+            for LINENUM in $(grep -n 'map' ${LSHTTPDCFPATH} | cut -d: -f 1)
+            do
+                if [ -e /var/www/html ] || [ -e /var/www/html.old ]; then 
+                    if [ "${BANNERNAME}" = 'wordpress' ]; then
+                        NEWDBPWD="  map                     wordpress ${PUBIP}"
+                    elif [ "${BANNERNAME}" = 'classicpress' ]; then
+                        NEWDBPWD="  map                     classicpress ${PUBIP}"
+                    elif [ "${BANNERNAME}" = 'joomla' ]; then
+                        NEWDBPWD="  map                     joomla ${PUBIP}"
+                    elif [ "${BANNERNAME}" = 'drupal' ]; then
+                        NEWDBPWD="  map                     drupal ${PUBIP}"                    
+                    fi    
+                else
+                    NEWDBPWD="  map                     Example ${PUBIP}"
                 fi    
-            else
-                NEWDBPWD="  map                     Example ${PUBIP}"
-            fi    
-            sed -i "${LINENUM}s/.*/${NEWDBPWD}/" ${LSHTTPDCFPATH}
-        done 
-    fi    
+                sed -i "${LINENUM}s/.*/${NEWDBPWD}/" ${LSHTTPDCFPATH}
+            done 
+        fi    
+    fi
 }
 
 update_sql_pwd(){
@@ -448,19 +461,24 @@ update_sql_pwd(){
         -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${root_mysql_pass}');"
     if [ "${BANNERNAME}" = 'wordpress' ]; then
         mysql -uroot -p${root_mysql_pass} \
-            -e "SET PASSWORD FOR 'wordpress'@'localhost' = PASSWORD('${wordpress_mysql_pass}');"
+            -e "SET PASSWORD FOR 'wordpress'@'localhost' = PASSWORD('${app_mysql_pass}');"
         mysql -uroot -p${root_mysql_pass} \
             -e "GRANT ALL PRIVILEGES ON wordpress.* TO wordpress@localhost"
     elif [ "${BANNERNAME}" = 'classicpress' ]; then
         mysql -uroot -p${root_mysql_pass} \
-            -e "SET PASSWORD FOR 'classicpress'@'localhost' = PASSWORD('${wordpress_mysql_pass}');"
+            -e "SET PASSWORD FOR 'classicpress'@'localhost' = PASSWORD('${app_mysql_pass}');"
         mysql -uroot -p${root_mysql_pass} \
             -e "GRANT ALL PRIVILEGES ON classicpress.* TO classicpress@localhost"
     elif [ "${BANNERNAME}" = 'joomla' ]; then
         mysql -uroot -p${root_mysql_pass} \
-            -e "SET PASSWORD FOR 'joomla'@'localhost' = PASSWORD('${wordpress_mysql_pass}');"
+            -e "SET PASSWORD FOR 'joomla'@'localhost' = PASSWORD('${app_mysql_pass}');"
         mysql -uroot -p${root_mysql_pass} \
             -e "GRANT ALL PRIVILEGES ON joomla.* TO joomla@localhost"
+    elif [ "${BANNERNAME}" = 'drupal' ]; then
+        mysql -uroot -p${root_mysql_pass} \
+            -e "SET PASSWORD FOR 'drupal'@'localhost' = PASSWORD('${app_mysql_pass}');"
+        mysql -uroot -p${root_mysql_pass} \
+            -e "GRANT ALL PRIVILEGES ON drupal.* TO drupal@localhost"            
     fi    
 }
 
@@ -516,17 +534,22 @@ update_pwd_file(){
     if [ "${BANNERNAME}" = 'wordpress' ]; then    
         cat >> ${DBPASSPATH} <<EOM
 root_mysql_pass="${root_mysql_pass}"
-wordpress_mysql_pass="${wordpress_mysql_pass}"
+wordpress_mysql_pass="${app_mysql_pass}"
 EOM
     elif [ "${BANNERNAME}" = 'classicpress' ]; then 
         cat >> ${DBPASSPATH} <<EOM 
 root_mysql_pass="${root_mysql_pass}"
-classicpress_mysql_pass="${wordpress_mysql_pass}"
+classicpress_mysql_pass="${app_mysql_pass}"
 EOM
     elif [ "${BANNERNAME}" = 'joomla' ]; then 
         cat >> ${DBPASSPATH} <<EOM 
 root_mysql_pass="${root_mysql_pass}"
-joomla_mysql_pass="${wordpress_mysql_pass}"
+joomla_mysql_pass="${app_mysql_pass}"
+EOM
+    elif [ "${BANNERNAME}" = 'drupal' ]; then 
+        cat >> ${DBPASSPATH} <<EOM 
+root_mysql_pass="${root_mysql_pass}"
+drupal_mysql_pass="${app_mysql_pass}"
 EOM
     fi    
 }
@@ -557,6 +580,34 @@ EOM
     sudo chmod 755 /etc/profile.d/afterssh.sh
 }
 
+setup_after_ssh_drupal(){
+    sudo cat << EOM > /etc/profile.d/afterssh.sh
+#!/bin/bash
+sudo mv /var/www/html/ /var/www/html.land/
+sudo mv /var/www/html.old/ /var/www/html/
+export COMPOSER_ALLOW_SUPERUSER=1
+cd /var/www/html
+echo '############# Auto-Installation (one time only) ###############'
+sudo drush -y site-install standard --db-url=mysql://drupal:${app_mysql_pass}@127.0.0.1/drupal --account-name=admin --account-pass=${ADMIN_PASS}
+sudo drush -y config-set system.performance css.preprocess 0 -q
+sudo drush -y config-set system.performance js.preprocess 0 -q
+sudo drush cache-rebuild -q
+sudo sed -i 's|docRoot.*html/|docRoot                   '/var/www/html/web/'|g' /usr/local/lsws/conf/vhosts/drupal/vhconf.conf >/dev/null
+sudo drush pm:enable lite_speed_cache
+sudo chmod 777 /var/www/html/web/sites/default/files
+sudo systemctl stop lsws >/dev/null 2>&1
+sudo /usr/local/lsws/bin/lswsctrl stop >/dev/null 2>&1
+sleep 1
+if [[ \$(sudo ps -ef | grep -i 'openlitespeed' | grep -v 'grep') != '' ]]; then
+  sudo kill -9 \$(sudo ps -ef | grep -v 'grep' | grep -i 'openlitespeed' | grep -i 'main' | awk '{print \$2}')
+fi
+sudo systemctl start lsws
+echo '#############################################################'
+sudo rm -f '/etc/profile.d/afterssh.sh'
+EOM
+    sudo chmod 755 /etc/profile.d/afterssh.sh
+}
+
 update_conntrack_max(){
     if [ "${PROVIDER}" = 'do' ] || [ "${PROVIDER}" = 'vultr' ] || [ "${PROVIDER}" = 'linode' ]; then
         grep nf_conntrack_max /etc/sysctl.conf >/dev/null 2>&1
@@ -568,7 +619,9 @@ update_conntrack_max(){
 }
 
 add_profile(){
-    echo "sudo /opt/domainsetup.sh" >> /etc/profile
+    if [ ${EDITION} != 'litespeed' ]; then
+        echo "sudo /opt/domainsetup.sh" >> /etc/profile
+    fi    
 }
 
 add_hosts(){
@@ -576,6 +629,14 @@ add_hosts(){
         NEWKEY="127.0.0.1 localhost $(hostname)"
         linechange '127.0.0.1' /etc/hosts "${NEWKEY}"
     fi
+}
+
+lsws_license(){
+    if [ ${EDITION} = 'litespeed' ]; then 
+        cd ${LSDIR}/conf
+        wget -q --no-check-certificate http://license.litespeedtech.com/reseller/trial.key
+        systemctl start lsws
+    fi    
 }
 
 install_rainloop(){
@@ -698,35 +759,44 @@ update_phpmyadmin() {
     fi
 }
 
-set_tmp() {
-    if [ ${OSNAME} = 'ubuntu' ]; then 
-        if ! $(cat /proc/mounts | grep -q '/dev/loop0 /tmp'); then
-            # Create Loop device
-            dd if=/dev/zero of=/usr/.tempdisk bs=100M count=15 > /dev/null 2>&1
-            mkfs.ext4 /usr/.tempdisk > /dev/null 2>&1
+main_cyber()
+{
+    panel_admin_update
+    panel_sshkey_update
+    panel_IP_update
+    passftp_IP_update
+    update_phpmyadmin
+    update_CPsqlpwd
+    update_secretkey
+    update_CPpwdfile
+    install_rainloop
+    filepermission_update
+    renew_blowfish
+    install_firewalld      
+}
 
-            # backup data
-            mkdir -p /usr/.tmpbak/ > /dev/null 2>&1
-            cp -pr /tmp/* /usr/.tmpbak/
-
-            # mount loop
-            mount -o loop,rw,nodev,nosuid,noexec,nofail /usr/.tempdisk /tmp > /dev/null 2>&1
-
-            # make sure permissions are correct
-            chmod 1777 /tmp
-
-            # move tmp files back
-            cp -pr /usr/.tmpbak/* /tmp/
-            rm -rf /usr/.tmpbak
-
-            # bind mount var/tmp
-            mount --bind /tmp /var/tmp > /dev/null 2>&1
-
-            # setup fstab entries
-            echo '/usr/.tempdisk /tmp ext4 loop,rw,noexec,nosuid,nodev,nofail 0 0' >> /etc/fstab
-            echo '/tmp /var/tmp none bind 0 0' >> /etc/fstab
-        fi
-    fi
+main_cms()
+{
+    update_sql_pwd
+    add_sql_debian
+    if [ "${BANNERNAME}" = 'joomla' ]; then
+        update_pwd_file
+        update_phpmyadmin
+        renew_blowfish
+        setup_after_ssh
+    elif [ "${BANNERNAME}" = 'drupal' ]; then
+        update_pwd_file
+        update_phpmyadmin
+        renew_blowfish
+        setup_after_ssh_drupal            
+    else
+        renew_wp_pwd
+        update_pwd_file
+        renew_wpsalt
+        update_phpmyadmin
+        renew_blowfish
+        setup_after_ssh
+    fi  
 }
 
 maincloud(){
@@ -742,41 +812,18 @@ maincloud(){
     replace_litenerip
     db_passwordfile
     update_conntrack_max
+    lsws_license
     gen_sql_pwd
     gen_salt_pwd
     gen_secretkey
     rm_dummy
     add_profile
     if [ "${PANEL}" = 'cyber' ]; then
-        panel_admin_update
-        panel_sshkey_update
-        panel_IP_update
-        passftp_IP_update
-        update_phpmyadmin
-        update_CPsqlpwd
-        update_secretkey
-        update_CPpwdfile
-        install_rainloop
-        filepermission_update
-        renew_blowfish
-        install_firewalld  
+        main_cyber
     elif [ "${APPLICATION}" = 'PYTHON' ]; then
         update_secretkey
-    elif [ "${APPLICATION}" = 'NONE' ]; then
-        update_sql_pwd
-        add_sql_debian
-        if [ "${BANNERNAME}" = 'joomla' ]; then
-            update_pwd_file
-            update_phpmyadmin
-            renew_blowfish
-        else
-            renew_wp_pwd
-            update_pwd_file
-            renew_wpsalt
-            update_phpmyadmin
-            renew_blowfish
-        fi
-        setup_after_ssh
+    elif [ "${APPLICATION}" = 'CMS' ]; then
+        main_cms   
     fi
 }
 

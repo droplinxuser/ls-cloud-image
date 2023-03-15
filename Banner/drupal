@@ -43,9 +43,9 @@ if [ -e /sys/devices/virtual/dmi/id/product_uuid ] && [[ "$(sudo cat /sys/device
 elif [ "$(sudo dmidecode -s bios-vendor)" = 'Google' ]; then 
     MYIP=$(curl -s -H "Metadata-Flavor: Google" http://metadata/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)
 elif [ "$(dmidecode -s system-product-name | cut -c 1-7)" = 'Alibaba' ]; then
-    MYIP=$(curl -s http://100.100.100.200/latest/meta-data/eipv4)     
+    MYIP=$(curl -s http://100.100.100.200/latest/meta-data/eipv4) 
 elif [ "$(dmidecode -s system-manufacturer)" = 'Microsoft Corporation' ];then    
-    MYIP=$(curl -s http://checkip.amazonaws.com || printf "0.0.0.0")    
+    MYIP=$(curl -s http://checkip.amazonaws.com || printf "0.0.0.0")
 else    
     MYIP=$(curl -s http://checkip.amazonaws.com || printf "0.0.0.0")
 fi    
@@ -64,20 +64,26 @@ clear
 cat <<EOF
 ********************************************************************************
 
-$(echoCYAN 'Welcome to One-Click LiteSpeed Server.')
-To keep this server secure, the firewalld is enabled.
+$(echoCYAN 'Welcome to One-Click OpenLiteSpeed Drupal Server.')
+To keep this server secure, the firewall is enabled.
 All ports are BLOCKED except 22 (SSH), 80 (HTTP) and 443 (HTTPS).
 
-The LiteSpeed wiki:
-* $(echoB 'https://docs.litespeedtech.com/lsws/')
-
+Drupal One-Click Quickstart guide:
+* $(echoB 'https://docs.litespeedtech.com/cloud/images/drupal/')
+$(show_install)
 In a web browser, you can view:
-* The empty page: $(echoY "http://$MYIP/")
+* The new Drupal site: $(echoY "http://$MYIP")
+* The new Drupal admin: $(echoY "http://$MYIP/user/login")
+* The phpMyAdmin: http://$MYIP/phpmyadmin
 
 On the server:
-* The default web root is located at /var/www/html
-* You can get the Web Admin admin password with the following command:
+* The default web root is located at /var/www/html/web/
+* You can get the MySQL root password and MySQL Drupal user password with command:
+   $(echoY "sudo cat ${HMUBUNTU}.db_password")
+* You can get the Drupal admin and Web Admin admin password with the following command:
    $(echoY "sudo cat ${HMUBUNTU}.litespeed_password")
+* The phpMyAdmin is located at /var/www/phpmyadmin
+* A script will run that will allow you to add a domain to the web server and implement SSL.
 
 System Status:
   $(echo "Load :")$(echoG "$LOAD")
@@ -86,4 +92,5 @@ System Status:
   $(echo "Disk :") $(echoG "$DISK")
 
 ********************************************************************************
+
 EOF
