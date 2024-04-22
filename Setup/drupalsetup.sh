@@ -26,6 +26,7 @@ root_mysql_pass=$(openssl rand -hex 24)
 ALLERRORS=0
 EXISTSQLPASS=''
 NOWPATH=$(pwd)
+BOTCRON='/etc/cron.d/certbot'
 
 echoY() {
     echo -e "\033[38;5;148m${1}\033[39m"
@@ -72,6 +73,7 @@ check_os()
         PHPINICONF="${LSWSFD}/lsphp${PHPVER}/etc/php.ini"
         MARIADBCNF='/etc/my.cnf.d/60-server.cnf'
         OSVER=$(cat /etc/redhat-release | awk '{print substr($4,1,1)}')
+        BOTCRON='/etc/crontab'
     elif [ -f /etc/lsb-release ] ; then
         OSNAME=ubuntu
         OSNAMEVER="UBUNTU$(lsb_release -sr | awk -F '.' '{print $1}')"    
@@ -335,22 +337,6 @@ context /phpmyadmin/ {
   }
 }
 
-context exp:^/sites/default/files/styles/(.*)/public/(.*) {
-  location                /var/www/html/web/sites/default/files/\$2
-  allowBrowse             1
-
-  addDefaultCharset       off
-
-}
-
-context /web/ {
-  location                /var/www/html/web/
-  allowBrowse             1
-
-  addDefaultCharset       off
-
-}
-
 rewrite  {
   enable                1
   autoLoadHtaccess        1
@@ -395,23 +381,6 @@ context /phpmyadmin/ {
     inherit               0
 
   }
-  addDefaultCharset       off
-
-}
-
-context exp:^/sites/default/files/styles/(.*)/public/(.*) {
-  location                /var/www/html/web/sites/default/files/\$2
-  allowBrowse             1
-
-  addDefaultCharset       off
-
-}
-
-
-context /web/ {
-  location                /var/www/html/web/
-  allowBrowse             1
- 
   addDefaultCharset       off
 
 }

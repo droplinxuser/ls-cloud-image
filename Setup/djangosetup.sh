@@ -2,7 +2,6 @@
 # /********************************************************************
 # LiteSpeed Django setup Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Copyright: (c) 2019-2022
 # @Version: 1.3
 # *********************************************************************/
 LSWSFD='/usr/local/lsws'
@@ -18,7 +17,7 @@ VHDOCROOT='/usr/local/lsws/Example/html'
 DEMOPROJECT="${VHDOCROOT}/${PROJNAME}"
 DEMOSETTINGS="${DEMOPROJECT}/${PROJNAME}/settings.py"
 ALLERRORS=0
-DJ_VER='>=3.2'
+DJ_VER='>=4.2'
 PY_V=''
 V_ENV='ON'
 NOWPATH=$(pwd)

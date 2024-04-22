@@ -36,6 +36,15 @@ providerck()
     fi
 }
 
+valid_do(){
+    if [ "${PROVIDER}" = 'do' ]; then
+        curl -sI https://raw.githubusercontent.com/digitalocean/marketplace-partners/master/scripts/99-img-check.sh >/dev/null
+        if [ $? = 0 ]; then
+            bash <( curl -sk https://raw.githubusercontent.com/digitalocean/marketplace-partners/master/scripts/99-img-check.sh )
+        fi    
+    fi    
+}
+
 check_root(){
     if [ $(id -u) -ne 0 ]; then
         echoR "Please run this script as root user or use sudo"
@@ -152,6 +161,7 @@ cleanup (){
     #rm -rf /var/lib/cloud/instances/*
     #system log
     rm -rf /var/log/unattended-upgrades
+    rm -f /var/log/ubuntu-advantage.log*
     rm -f /var/log/apt/history.log*
     rm -f /var/log/apt/term.log*
     rm -f /var/log/apt/eipp.log*
@@ -247,6 +257,7 @@ main_claunch(){
     install_cloudinit
     setup_cloud
     cleanup
+    valid_do
 }
 main_claunch
 exit 0
