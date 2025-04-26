@@ -11,7 +11,7 @@ LSWSVCONF="${LSWSFD}/conf/vhosts"
 LSWSCONF="${LSWSFD}/conf/httpd_config.conf"
 WPVHCONF="${LSWSFD}/conf/vhosts/wordpress/vhconf.conf"
 EXAMPLECONF="${LSWSFD}/conf/vhosts/wordpress/vhconf.conf"
-PHPVERD=8.1
+PHPVERD=8.3
 PHPVER=$(echo ${PHPVERD//./})
 PHP_MV=$(cut -d "." -f1 <<< ${PHPVER})
 PHP_SV=$(cut -d "." -f2 <<< ${PHPVER})
@@ -221,7 +221,7 @@ centos_install_certbot(){
 } 
 
 ubuntu_install_basic(){
-    apt-get -y install wget unzip > /dev/null 2>&1
+    apt-get -y install wget unzip ufw > /dev/null 2>&1
 }
 
 ubuntu_install_ols(){

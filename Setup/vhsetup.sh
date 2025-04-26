@@ -2,8 +2,8 @@
 # /********************************************************************
 # LiteSpeed domain setup Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Copyright: (c) 2019-2024
-# @Version: 2.4
+# @Copyright: (c) 2019-2025
+# @Version: 2.6
 # *********************************************************************/
 MY_DOMAIN=''
 MY_DOMAIN2=''
@@ -20,7 +20,7 @@ PLUGINLIST="litespeed-cache.zip"
 CKREG="^[a-z0-9!#\$%&'*+/=?^_\`{|}~-]+(\.[a-z0-9!#$%&'*+/=?^_\`{|}~-]+)*\
 @([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]*[a-z0-9])?\$"
 THEME='twentytwenty'
-PHPVER=lsphp74
+PHPVER=lsphp83
 WEBSERVER='OLS'
 USER='www-data'
 GROUP='www-data'
@@ -179,7 +179,12 @@ function check_os
             OSNAMEVER=UBUNTU22
             OSVER=jammy
             MARIADBCPUARCH="arch=amd64"
-            ;;            
+            ;;         
+        noble)            
+            OSNAMEVER=UBUNTU24
+            OSVER=noble
+            MARIADBCPUARCH="arch=amd64"
+            ;;                 
         esac
     elif [ -f /etc/debian_version ] ; then
         OSNAME=debian
@@ -204,11 +209,16 @@ function check_os
             OSVER=bullseye
             MARIADBCPUARCH="arch=amd64,i386"
             ;;
+        bookworm)
+            OSNAMEVER=DEBIAN12
+            OSVER=bookworm
+            MARIADBCPUARCH="arch=amd64,i386"
+            ;;            
         esac    
     fi
 
     if [ "$OSNAMEVER" = '' ] ; then
-        echoR "Sorry, currently one click installation only supports Centos(6-8), Debian(8-11) and Ubuntu(14,16,18,20,22)."
+        echoR "Sorry, currently one click installation only supports Centos(6-9), Debian(8-12) and Ubuntu(14~24)."
         echoR "You can download the source code and build from it."
         echoR "The url of the source code is https://github.com/litespeedtech/openlitespeed/releases."
         exit 1
@@ -262,10 +272,28 @@ check_process(){
     ps aux | grep ${1} | grep -v grep >/dev/null 2>&1
 }
 check_php_version(){
-    PHP_MA="$(php -r 'echo PHP_MAJOR_VERSION;')"
-    PHP_MI="$(php -r 'echo PHP_MINOR_VERSION;')"
+    if [ -e ${LSDIR}/fcgi-bin/lsphpnew ]; then
+        PHP_MA="$(${LSDIR}/fcgi-bin/lsphpnew -v 2>/dev/null | head -n 1 | awk '{print $2}'| awk -F '.' '{print $1}')"
+        PHP_MI="$(${LSDIR}/fcgi-bin/lsphpnew -v 2>/dev/null | head -n 1 | awk '{print $2}'| awk -F '.' '{print $2}')"
+    else
+        PHP_MA="$(php -r 'echo PHP_MAJOR_VERSION;')"
+        PHP_MI="$(php -r 'echo PHP_MINOR_VERSION;')"
+    fi
     if [ -e ${LSDIR}/lsphp${PHP_MA}${PHP_MI}/bin/php ]; then
         PHPVER="lsphp${PHP_MA}${PHP_MI}"
+    else
+        echoR "${LSDIR}/lsphp${PHP_MA}${PHP_MI}/bin/php does not exist!"   
+    fi
+}
+
+detect_web_user(){
+    TMP_USER=$(grep 'user' "${WEBCF}" | awk -F '>' '{print $2}' | awk -F '<' '{print $1}')
+    if [ "$TMP_USER" != '' ]; then
+        USER="$TMP_USER"
+    fi
+    TMP_GROUP=$(grep 'group' "${WEBCF}" | awk -F '>' '{print $2}' | awk -F '<' '{print $1}')
+    if [ "$TMP_GROUP" != '' ]; then
+        GROUP="$TMP_GROUP"
     fi
 }
 
@@ -283,6 +311,7 @@ check_webserver(){
             WEBSERVER='LSWS'
             WEBCF="${LSDIR}/conf/httpd_config.xml"
             VH_CONF_FILE="${VHDIR}/${MY_DOMAIN}/vhconf.xml"
+            detect_web_user
         else 
             echoR 'No web serevr detect, exit!'
             exit 2
@@ -716,7 +745,7 @@ EOF
         cat > ${VH_CONF_FILE} << EOF
 docRoot                   \$VH_ROOT
 vhDomain                  \$VH_DOMAIN
-vhAliases                 www.$VH_DOMAIN
+vhAliases                 
 adminEmails               localhost@example
 enableGzip                1
 
@@ -748,6 +777,7 @@ type                    lsapi
 address                 uds://tmp/lshttpd/${MY_DOMAIN}.sock
 maxConns                35
 env                     PHP_LSAPI_CHILDREN=35
+env                     LSAPI_AVOID_FORK=200M
 initTimeout             60
 retryTimeout            0
 persistConn             1
@@ -760,10 +790,10 @@ extUser                 ${USER}
 extGroup                ${GROUP}
 runOnStartUp            1
 priority                0
-memSoftLimit            2047M
-memHardLimit            2047M
-procSoftLimit           400
-procHardLimit           500
+memSoftLimit            
+memHardLimit            
+procSoftLimit           
+procHardLimit           
 }
 
 rewrite  {

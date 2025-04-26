@@ -2,7 +2,7 @@
 # /********************************************************************
 # LiteSpeed Rails setup Script
 # @Author:   LiteSpeed Technologies, Inc. (https://www.litespeedtech.com)
-# @Version: 1.3
+# @Version: 1.3.1
 # *********************************************************************/
 LSWSFD='/usr/local/lsws'
 PHPVER=74
@@ -16,7 +16,7 @@ VHDOCROOT='/usr/local/lsws/Example/html'
 DEMOPROJECT="${VHDOCROOT}/${PROJNAME}"
 CLONE_PATH='/opt'
 ALLERRORS=0
-RUBYV='3.0.2'
+RUBYV='3.0.7'
 NODEJSV='16'
 NOWPATH=$(pwd)
 RUBY_PATH='/usr/bin/ruby'
@@ -128,7 +128,7 @@ centos_install_basic(){
 }
 
 ubuntu_install_basic(){
-    apt-get -y install wget > /dev/null 2>&1
+    apt-get -y install wget ufw> /dev/null 2>&1
     apt-get -y install autoconf bison build-essential libssl-dev libyaml-dev libreadline6-dev \
       zlib1g-dev libncurses5-dev libffi-dev libgdbm-dev libsqlite3-dev > /dev/null 2>&1
     if [ "${OSNAMEVER}" = 'UBUNTU18' ]; then 
@@ -201,6 +201,7 @@ install_ruby(){
 install_gem(){
     echoG 'Install gem'
     symlink "${CLONE_PATH}/.rbenv/versions/${RUBYV}/bin/gem" '/usr/bin/gem'
+    gem update --system > /dev/null 2>&1
     GEM_V="$(gem -v)"
     output_msg "${?}" 'gem'
 }
@@ -451,7 +452,7 @@ app_setup(){
     sleep 3
     grep welcome config/routes.rb >/dev/null 2>&1
     if [ ${?} = 0 ]; then
-        NEWKEY='  get "/", to: "rails/welcome#index"'
+        NEWKEY='  get "/", to: "welcome#index"'
         linechange '/index' config/routes.rb "${NEWKEY}"
     else 
         echoR 'Welcome not exist! Skip setting'
