@@ -11,14 +11,14 @@ LSWSVCONF="${LSWSFD}/conf/vhosts"
 LSWSCONF="${LSWSFD}/conf/httpd_config.conf"
 WPVHCONF="${LSWSFD}/conf/vhosts/wordpress/vhconf.conf"
 EXAMPLECONF="${LSWSFD}/conf/vhosts/wordpress/vhconf.conf"
-PHPVERD=8.3
+PHPVERD=8.4
 PHPVER=$(echo ${PHPVERD//./})
 PHP_MV=$(cut -d "." -f1 <<< ${PHPVER})
 PHP_SV=$(cut -d "." -f2 <<< ${PHPVER})
 PHPINICONF="${LSWSFD}/lsphp${PHPVER}/etc/php/${PHPVERD}/litespeed/php.ini"
 MARIADBSERVICE='/lib/systemd/system/mariadb.service'
 MARIADBCNF='/etc/mysql/mariadb.conf.d/60-server.cnf'
-DRUSHVER=12
+DRUSHVER=13
 FIREWALLLIST="22 80 443"
 USER='www-data'
 GROUP='www-data'
@@ -45,12 +45,6 @@ linechange(){
         sed -i "${LINENUM}d" ${2}
         sed -i "${LINENUM}i${3}" ${2}
     fi  
-}
-
-get_sql_ver(){
-    SQLDBVER=$(/usr/bin/mysql -V | awk '{match($0,"([^ ]+)-MariaDB",a)}END{print a[1]}')
-    SQL_MAINV=$(echo ${SQLDBVER} | awk -F '.' '{print $1}')
-    SQL_SECV=$(echo ${SQLDBVER} | awk -F '.' '{print $2}')
 }
 
 check_sql_ver(){    
@@ -126,6 +120,23 @@ change_owner(){
 prepare(){
     mkdir -p "${DOCLAND}"
     change_owner /var/www
+}
+
+compatible_mariadb_cmd()
+{
+    if [ -e /usr/bin/mariadb ]; then
+        mysqladmin='mariadb-admin'
+        mysql='mariadb'
+    else
+        mysqladmin='mysql-admin'
+        mysql='mysql'    
+    fi    
+}
+
+get_sql_ver(){
+    SQLDBVER=$(${mysql} -V | awk '{match($0,"([^ ]+)-MariaDB",a)}END{print a[1]}')
+    SQL_MAINV=$(echo ${SQLDBVER} | awk -F '.' '{print $1}')
+    SQL_SECV=$(echo ${SQLDBVER} | awk -F '.' '{print $2}')
 }
 
 system_upgrade() {
@@ -435,18 +446,18 @@ config_mysql(){
     fi    
     if [ "${EXISTSQLPASS}" = '' ]; then
         if (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=4 )); then
-            mysql -u root -p${root_mysql_pass} \
+            "${mysql}" -u root -p${root_mysql_pass} \
                 -e "ALTER USER root@localhost IDENTIFIED VIA mysql_native_password USING PASSWORD('${root_mysql_pass}');"
         else
-            mysql -u root -p${root_mysql_pass} \
+            "${mysql}" -u root -p${root_mysql_pass} \
                 -e "update mysql.user set authentication_string=password('${root_mysql_pass}') where user='root';"
         fi    
     else
         if (( ${SQL_MAINV} >=10 )) && (( ${SQL_SECV} >=4)); then
-            mysql -u root -p${EXISTSQLPASS} \
+            "${mysql}" -u root -p${EXISTSQLPASS} \
                 -e "ALTER USER root@localhost IDENTIFIED VIA mysql_native_password USING PASSWORD('${root_mysql_pass}');"
         else        
-            mysql -u root -p${EXISTSQLPASS} \     
+            "${mysql}" -u root -p${EXISTSQLPASS} \     
                 -e "update mysql.user set authentication_string=password('${root_mysql_pass}') where user='root';" 
         fi        
     fi
@@ -641,6 +652,7 @@ ubuntu_main_config(){
 }
 
 app_main_config(){
+    compatible_mariadb_cmd
     config_mysql
     rm_wordpress
     app_drupal_dl
